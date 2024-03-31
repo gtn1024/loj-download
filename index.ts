@@ -42,7 +42,7 @@ async function _download(url: string, path: string, retry: number) {
 
 function downloadFile(url: string): SuperAgentRequest;
 function downloadFile(url: string, path?: string, retry?: number);
-function downloadFile(url: string, path?: string, retry = 20) {
+function downloadFile(url: string, path?: string, retry = 3) {
     if (path) return _download(url, path, retry);
     return superagent.get(url).timeout({ response: 3000, deadline: 60000 }).proxy(p).retry(retry);
 }
@@ -287,7 +287,9 @@ ${result.body.samples[section.sampleId].outputData}
                         return;
                     } else console.log(filepath, size, expectedSize);
                 }
+                console.log(`[${getCurrentTime()}] Downloading ${filepath}`);
                 await downloadFile(url, write(filepath));
+                console.log(`[${getCurrentTime()}] Downloaded ${filepath}`);
                 downloadedSize += expectedSize;
                 downloadedCount++;
                 report2.update(downloadedSize / totalSize, `(${size(downloadedSize)}/${size(totalSize)}) ` + name + ' (' + (downloadedCount + 1) + '/' + totalCount + ')');
@@ -358,6 +360,10 @@ process.on('uncaughtException', (e) => {
     }, 1000);
 });
 
+function getCurrentTime() {
+    return new Date().toLocaleString();
+}
+
 async function main() {
     const status = JSON.parse(fs.readFileSync('downloads/status.json', 'utf-8'))
     for (let i = 0; ; i += 100) {
@@ -371,10 +377,10 @@ async function main() {
         for (const p of res.result) {
             const id = p.meta.displayId;
             if (status[id]) {
-                console.log(`Skip downloading https://loj.ac/p/${id}`);
+                console.log(`[${getCurrentTime()}] Skip downloading https://loj.ac/p/${id}`);
                 continue;
             }
-            console.log(`Start downloading https://loj.ac/p/${id}`);
+            console.log(`[${getCurrentTime()}] Start downloading https://loj.ac/p/${id}`);
 
             await run(`https://loj.ac/p/${id}`)
                 .then(() => {
@@ -389,7 +395,7 @@ async function main() {
                     }, 1000);
                 });
 
-            console.log(`Finished downloading https://loj.ac/p/${id}`);
+            console.log(`[${getCurrentTime()}] Finished downloading https://loj.ac/p/${id}`);
         }
     }
 }
