@@ -42,7 +42,7 @@ async function _download(url: string, path: string, retry: number) {
 
 function downloadFile(url: string): SuperAgentRequest;
 function downloadFile(url: string, path?: string, retry?: number);
-function downloadFile(url: string, path?: string, retry = 3) {
+function downloadFile(url: string, path?: string, retry = 20) {
     if (path) return _download(url, path, retry);
     return superagent.get(url).timeout({ response: 3000, deadline: 60000 }).proxy(p).retry(retry);
 }
@@ -281,11 +281,11 @@ ${result.body.samples[section.sampleId].outputData}
                 const filepath = type + '/' + name;
                 if (fs.existsSync('downloads/' + host + '/' + pid + '/' + filepath)) {
                     const size = fs.statSync('downloads/' + host + '/' + pid + '/' + filepath).size;
-                                        if (size === expectedSize) {
+                    if (size === expectedSize) {
                         downloadedSize += size;
                         downloadedCount++;
                         return;
-                    }else console.log(filepath,size,expectedSize);
+                    } else console.log(filepath, size, expectedSize);
                 }
                 await downloadFile(url, write(filepath));
                 downloadedSize += expectedSize;
@@ -358,11 +358,49 @@ process.on('uncaughtException', (e) => {
     }, 1000);
 });
 
-if (!process.argv[2]) console.log('loj-download <url>');
-else run(process.argv[2]).catch(e => {
-    console.error(e);
-    setTimeout(() => {
-        console.error(e);
-        process.exit(1);
-    }, 1000);
-});
+async function main() {
+    const status = JSON.parse(fs.readFileSync('downloads/status.json', 'utf-8'))
+    for (let i = 0; ; i += 100) {
+        const res = await superagent.post('https://api.loj.ac/api/problem/queryProblemSet')
+            .send({ "locale": "en_US", "skipCount": i, "takeCount": 100 })
+            .proxy(p)
+            .timeout(3000)
+            .retry(3)
+            .then((res) => res.body)
+        if (!res.result.length) break;
+        for (const p of res.result) {
+            const id = p.meta.displayId;
+            if (status[id]) {
+                console.log(`Skip downloading https://loj.ac/p/${id}`);
+                continue;
+            }
+            console.log(`Start downloading https://loj.ac/p/${id}`);
+
+            await run(`https://loj.ac/p/${id}`)
+                .then(() => {
+                    status[id] = true;
+                    fs.writeFileSync('downloads/status.json', JSON.stringify(status, null, 4));
+                })
+                .catch(e => {
+                    console.error(e);
+                    setTimeout(() => {
+                        console.error(e);
+                        process.exit(1);
+                    }, 1000);
+                });
+
+            console.log(`Finished downloading https://loj.ac/p/${id}`);
+        }
+    }
+}
+
+main()
+
+// if (!process.argv[2]) console.log('loj-download <url>');
+// else run(process.argv[2]).catch(e => {
+//     console.error(e);
+//     setTimeout(() => {
+//         console.error(e);
+//         process.exit(1);
+//     }, 1000);
+// });
